@@ -1001,6 +1001,4 @@ max_date <- max(air_visits$visit_date)
 split_date <- max_date - pred_len
 all_visits <- tibble(visit_date = seq(min(air_visits$visit_date), max(air_visits$visit_date), 1))
 
-=======
-#Assignment done by manash
->>>>>>> 70ed2d2354b827a9d4f2d6728f03a4fec3b895cb
+
