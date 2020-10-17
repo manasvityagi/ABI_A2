@@ -818,3 +818,91 @@ p3 <- air_visits %>%
 
 layout <- matrix(c(1,2,3,3),2,2,byrow=TRUE)
 multiplot(p1, p2, p3, layout=layout)
+
+#Distance from the busiest area
+
+p1 <- air_store %>%
+  ggplot(aes(dist)) +
+  geom_histogram(bins = 30, fill = "blue") +
+  geom_vline(xintercept = c(80, 300, 500, 750)) +
+  labs(x = "Linear distance [km]")
+
+p2 <- hpg_store %>%
+  ggplot(aes(dist)) +
+  geom_histogram(bins = 30, fill = "red") +
+  geom_vline(xintercept = c(80, 300, 500, 750)) +
+  labs(x = "Linear distance [km]")
+
+p3 <- air_visits %>%
+  left_join(air_store, by = "air_store_id") %>%
+  group_by(air_store_id, dist_group) %>%
+  summarise(mean_store_visit = mean(log1p(visitors))) %>%
+  group_by(dist_group) %>%
+  summarise(mean_log_visitors = mean(mean_store_visit),
+            sd_log_visitors = sd(mean_store_visit)) %>%
+  ggplot(aes(dist_group, mean_log_visitors)) +
+  geom_point(size = 4, color = "blue") +
+  geom_errorbar(aes(ymin = mean_log_visitors - sd_log_visitors,
+                    ymax = mean_log_visitors + sd_log_visitors),
+                color = "blue", width = 0.5, size = 0.7) +
+  labs(x = "Distance grouping")
+
+
+layout <- matrix(c(1,2,3,3),2,2,byrow=TRUE)
+multiplot(p1, p2, p3, layout=layout)
+
+# Geo Visualization
+foo <- air_store %>% select(latitude, longitude, dist_group) %>% mutate(dset = "air")
+bar <- hpg_store %>% select(latitude, longitude, dist_group) %>% mutate(dset = "hpg")
+
+leaflet(foo) %>%
+  addTiles() %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addScaleBar() %>%
+  addCircleMarkers(~longitude, ~latitude, group = "AIR",
+                   color = "blue", fillOpacity = 0.5, radius = 3*foo$dist_group) %>%
+  addCircleMarkers(lng = bar$longitude, lat = bar$latitude, group = "HPG",
+                   color = "red", fillOpacity = 0.5, radius = 3*bar$dist_group) %>%
+  addCircleMarkers(lng = med_coord_air$longitude, lat = med_coord_air$latitude, group = "Centre",
+                   color = "darkgreen", fillOpacity = 1) %>%
+  addLayersControl(
+    overlayGroups = c("AIR", "HPG", "Centre"),
+    options = layersControlOptions(collapsed = FALSE)
+  )
+
+# Prefectures/location relation
+
+p1 <- air_store %>%
+  ggplot(aes(prefecture)) +
+  geom_bar(fill = "blue") +
+  coord_flip() +
+  ggtitle("air prefectures - # restaurants") +
+  labs(x = "")
+
+p2 <- hpg_store %>%
+  ggplot(aes(prefecture)) +
+  geom_bar(fill = "red") +
+  coord_flip() +
+  ggtitle("hpg prefectures - # restaurants") +
+  labs(x = "")
+
+p3 <- air_visits %>%
+  left_join(air_store, by = "air_store_id") %>%
+  group_by(air_store_id, prefecture) %>%
+  summarise(mean_store_visit = mean(log1p(visitors))) %>%
+  group_by(prefecture) %>%
+  summarise(mean_log_visitors = mean(mean_store_visit),
+            sd_log_visitors = sd(mean_store_visit)) %>%
+  ggplot(aes(prefecture, mean_log_visitors)) +
+  geom_point(size = 4, color = "blue") +
+  geom_errorbar(aes(ymin = mean_log_visitors - sd_log_visitors,
+                    ymax = mean_log_visitors + sd_log_visitors),
+                color = "blue", width = 0.5, size = 0.7) +
+  labs(x = "prefecture") +
+  theme(axis.text.x  = element_text(angle=15, hjust=1, vjust=0.9))
+
+layout <- matrix(c(1,2,1,2,1,2,3,3,3,3),5,2,byrow=TRUE)
+multiplot(p1, p2, p3, layout=layout)
+
+
+# commnet for manash
