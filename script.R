@@ -906,3 +906,97 @@ multiplot(p1, p2, p3, layout=layout)
 
 
 # commnet for manash
+# Time series parameters
+# After engineering new features based on the geographical or culinary 
+# properties of the different restaurants, we will now look directly at the time series of their visitor numbers
+
+foo <- air_visits %>%
+  left_join(air_store, by = "air_store_id") %>%
+  group_by(air_store_id, air_genre_name) %>%
+  summarise(mean_log_visits = mean(log1p(visitors)),
+            mean_log_visits = mean(log1p(visitors)),
+            sd_log_visits = sd(log1p(visitors))) %>%
+  ungroup()
+
+params_ts1 <- function(rownr){
+  bar <- air_visits %>%
+    filter(air_store_id == foo$air_store_id[rownr])
+  slope <- summary(lm(visitors ~ visit_date, data = bar))$coef[2]
+  slope_err <- summary(lm(visitors ~ visit_date, data = bar))$coef[4]
+  
+  foobar <- tibble(
+    air_store_id = foo$air_store_id[rownr],
+    slope = slope,
+    slope_err = slope_err
+  )
+  
+  return(foobar)
+}
+
+params <- params_ts1(1)
+for (i in seq(2,nrow(foo))){
+  params <- bind_rows(params, params_ts1(i))
+}
+
+ts_params <- foo %>%
+  left_join(params, by = "air_store_id")
+p1 <- ts_params %>%
+  ggplot(aes(mean_log_visits)) +
+  geom_histogram(bins = 50, fill = "blue")
+
+p2 <- ts_params %>%
+  ggplot(aes(sd_log_visits)) +
+  geom_histogram(bins = 50, fill = "blue")
+
+p3 <- ts_params %>%
+  filter(slope < 0.5) %>%
+  ggplot(aes(slope)) +
+  geom_histogram(bins = 50, fill = "blue") +
+  labs(x = "Slope < 0.5")
+
+p4 <- ts_params %>%
+  ggplot((aes(mean_log_visits, sd_log_visits))) +
+  geom_point(size = 2, color = "blue")
+
+p5 <- ts_params %>%
+  ggplot((aes(slope, slope_err))) +
+  geom_point(size = 2, color = "blue")
+
+layout <- matrix(c(1,1,2,2,3,3,4,4,4,5,5,5),2,6,byrow=TRUE)
+multiplot(p1, p2, p3, p4, p5, layout=layout)
+
+##summary
+ts_params %>%
+  filter(abs(slope) > 0.25) %>%
+  select(air_store_id, air_genre_name, slope, slope_err)
+
+##
+ts_params %>%
+  ggplot(aes(mean_log_visits, slope, color = air_genre_name)) +
+  geom_errorbarh(aes(xmin = mean_log_visits - sd_log_visits,
+                     xmax = mean_log_visits + sd_log_visits),
+                 color = "grey70", size = 0.7) +
+  geom_errorbar(aes(ymin = slope - slope_err,
+                    ymax = slope + slope_err),
+                color = "grey70", size = 0.7) +
+  geom_point() +
+  theme(legend.position = "bottom") +
+  guides(color = guide_legend(nrow = 3, override.aes = list(size = 4))) +
+  labs(color = "") +
+  facet_zoom(y = (slope < 0.05 & slope > -0.1))
+
+########################### Main Part of Forecasting ################################
+# 8 Forecasting methods and examples
+
+# 8.1 ARIMA / auto.arima
+air_id = "air_ba937bf13d40fb24"
+
+pred_len <- test %>%
+  separate(id, c("air", "store_id", "date"), sep = "_") %>%
+  distinct(date) %>%
+  nrow()
+
+max_date <- max(air_visits$visit_date)
+split_date <- max_date - pred_len
+all_visits <- tibble(visit_date = seq(min(air_visits$visit_date), max(air_visits$visit_date), 1))
+
