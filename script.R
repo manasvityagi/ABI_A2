@@ -1371,7 +1371,7 @@ pred_tk <- tibble(
   value = pred
 )
 
-## as a function
+## Now wrapping it as a function to be reused
 
 plot_tk_lm_air_id <- function(air_id){
   
