@@ -348,3 +348,301 @@ p2 <- hpg_store %>%
 
 layout <- matrix(c(1,2),1,2,byrow=TRUE)
 multiplot(p1, p2, layout=layout)
+
+# Visualize
+# Holidays
+
+foo <- holidays %>%
+  mutate(wday = wday(date, week_start = 1))
+
+p1 <- foo %>%
+  ggplot(aes(holiday_flg, fill = holiday_flg)) +
+  geom_bar() +
+  theme(legend.position = "none")
+
+p2 <- foo %>%
+  filter(date > ymd("2016-04-15") & date < ymd("2016-06-01")) %>%
+  ggplot(aes(date, holiday_flg, color = holiday_flg)) +
+  geom_point(size = 2) +
+  theme(legend.position = "none") +
+  labs(x = "2016 date")
+
+p3 <- foo %>%
+  filter(date > ymd("2017-04-15") & date < ymd("2017-06-01")) %>%
+  ggplot(aes(date, holiday_flg, color = holiday_flg)) +
+  geom_point(size = 2) +
+  theme(legend.position = "none") +
+  labs(x = "2017 date")
+
+layout <- matrix(c(1,1,2,3),2,2,byrow=FALSE)
+multiplot(p1, p2, p3, layout=layout)
+
+# Summarize
+holidays %>% summarise(frac = mean(holiday_flg))
+
+
+# Visualize
+# Test Data set
+
+foo <- air_visits %>%
+  rename(date = visit_date) %>%
+  distinct(date) %>%
+  mutate(dset = "train")
+
+bar <- test %>%
+  separate(id, c("foo", "bar", "date"), sep = "_") %>%
+  mutate(date = ymd(date)) %>%
+  distinct(date) %>%
+  mutate(dset = "test")
+
+foo <- foo %>%
+  bind_rows(bar) %>%
+  mutate(year = year(date))
+year(foo$date) <- 2017
+
+foo %>%
+  filter(!is.na(date)) %>%
+  mutate(year = fct_relevel(as.factor(year), c("2017","2016"))) %>%
+  ggplot(aes(date, year, color = dset)) +
+  geom_point(shape = "|", size = 10) +
+  scale_x_date(date_labels = "%B", date_breaks = "1 month") +
+  #scale_y_reverse() +
+  theme(legend.position = "bottom", axis.text.x  = element_text(angle=45, hjust=1, vjust=0.9)) +
+  labs(color = "Data set") +
+  guides(color = guide_legend(override.aes = list(size = 4, pch = 15)))
+
+############################################### EXPLORATION ENDS HERE ###########################################
+############################################### EXPLORATION ENDS HERE ###########################################
+############################################### EXPLORATION ENDS HERE ###########################################
+############################################### EXPLORATION ENDS HERE ###########################################
+
+# Feature Relations
+
+#After looking at every data set individually This will tell us something 
+#about the relations between the various features and how these relations might affect the visitor numbers. Any signal we #find will need to be interpreted in the context of the individual feature distributions
+
+#Visitors per genre
+
+foo <- air_visits %>%
+  left_join(air_store, by = "air_store_id")
+
+foo %>%
+  group_by(visit_date, air_genre_name) %>%
+  summarise(mean_visitors = mean(visitors)) %>%
+  ungroup() %>%
+  ggplot(aes(visit_date, mean_visitors, color = air_genre_name)) +
+  geom_line() +
+  labs(y = "Average number of visitors to 'air' restaurants", x = "Date") +
+  theme(legend.position = "none") +
+  scale_y_log10() +
+  facet_wrap(~ air_genre_name)
+
+# Next relation
+
+p1 <- foo %>%
+  mutate(wday = wday(visit_date, label = TRUE, week_start = 1)) %>%
+  group_by(wday, air_genre_name) %>%
+  summarise(mean_visitors = mean(visitors)) %>%
+  ggplot(aes(air_genre_name, mean_visitors, color = wday)) +
+  geom_point(size = 4) +
+  theme(legend.position = "left", axis.text.y = element_blank(),
+        plot.title = element_text(size = 14)) +
+  coord_flip() +
+  labs(x = "") +
+  scale_x_discrete(position = "top") +
+  ggtitle("air_genre_name") +
+  scale_color_hue()
+
+p2 <- foo %>%
+  ggplot(aes(visitors, air_genre_name, fill = air_genre_name)) +
+  geom_density_ridges(bandwidth = 0.1) +
+  scale_x_log10() +
+  theme(legend.position = "none") +
+  labs(y = "") +
+  scale_fill_cyclical(values = c("blue", "red"))
+
+layout <- matrix(c(1,1,2,2,2),1,5,byrow=TRUE)
+multiplot(p1, p2, layout=layout)
+
+p1 <- 1; p2 <- 1; p3 <- 1; p4 <- 1; p5 <- 1
+
+# The impact of holidays Visualized
+foo <- air_visits %>%
+  mutate(calendar_date = as.character(visit_date)) %>%
+  left_join(holidays, by = "calendar_date")
+
+p1 <- foo %>%
+  ggplot(aes(holiday_flg, visitors, color = holiday_flg)) +
+  geom_boxplot() +
+  scale_y_log10() +
+  theme(legend.position = "none")
+
+p2 <- foo %>%
+  mutate(wday = wday(date, label = TRUE, week_start = 1)) %>%
+  group_by(wday, holiday_flg) %>%
+  summarise(mean_visitors = mean(visitors)) %>%
+  ggplot(aes(wday, mean_visitors, color = holiday_flg)) +
+  geom_point(size = 4) +
+  theme(legend.position = "none") +
+  labs(y = "Average number of visitors")
+
+layout <- matrix(c(1,2),1,2,byrow=TRUE)
+multiplot(p1, p2, layout=layout)
+
+#  Restaurants per area and the effect on visitor numbers
+
+air_store %>%
+  mutate(area = str_sub(air_area_name, 1, 12)) %>%
+  ggplot(aes(area, air_genre_name)) +
+  geom_count(colour = "blue") +
+  theme(legend.position = "bottom", axis.text.x  = element_text(angle=45, hjust=1, vjust=0.9))
+
+# 
+
+hpg_store %>%
+  mutate(area = str_sub(hpg_area_name, 1, 10)) %>%
+  ggplot(aes(area, hpg_genre_name)) +
+  geom_count(colour = "red") +
+  theme(legend.position = "bottom", axis.text.x  = element_text(angle=45, hjust=1, vjust=0.9))
+
+#
+
+air_store %>%
+  group_by(air_genre_name, air_area_name) %>%
+  count() %>%
+  ggplot(aes(reorder(air_genre_name, n, FUN = mean), n)) +
+  geom_boxplot() +
+  geom_jitter(color = "blue") +
+  scale_y_log10() +
+  coord_flip() +
+  labs(x = "Air genre", y = "Occurences per air area")
+
+#
+
+air_store %>%
+  filter(air_store_id == "air_b5598d12d1b84890" | air_store_id == "air_bbe1c1a47e09f161")
+
+#
+
+air_visits %>%
+  filter(air_store_id == "air_b5598d12d1b84890" | air_store_id == "air_bbe1c1a47e09f161") %>%
+  arrange(visit_date) %>%
+  head(10)
+
+#
+
+foobar <- hpg_store %>%
+  group_by(hpg_genre_name, hpg_area_name) %>%
+  count()
+
+foobar %>%
+  ggplot(aes(reorder(hpg_genre_name, n, FUN = mean), n)) +
+  geom_boxplot() +
+  geom_jitter(color = "red") +
+  scale_y_log10() +
+  coord_flip() +
+  labs(x = "hpg genre", y = "Cases per hpg area")
+
+###
+
+foo <- air_visits %>%
+  left_join(air_store, by = "air_store_id")
+
+bar <- air_store %>%
+  group_by(air_genre_name, air_area_name) %>%
+  count()
+
+foobar <- hpg_store %>%
+  group_by(hpg_genre_name, hpg_area_name) %>%
+  count()
+
+p1 <- bar %>%
+  ggplot(aes(n)) +
+  geom_histogram(fill = "blue", binwidth = 1) +
+  labs(x = "Air genres per area")
+
+p2 <- foobar %>%
+  ggplot(aes(n)) +
+  geom_histogram(fill = "red", binwidth = 1) +
+  labs(x = "HPG genres per area")
+
+p3 <- foo %>%
+  group_by(air_genre_name, air_area_name) %>%
+  summarise(mean_log_visit = mean(log1p(visitors))) %>%
+  left_join(bar, by = c("air_genre_name","air_area_name")) %>%
+  group_by(n) %>%
+  summarise(mean_mlv = mean(mean_log_visit),
+            sd_mlv = sd(mean_log_visit)) %>%
+  replace_na(list(sd_mlv = 0)) %>%
+  ggplot(aes(n, mean_mlv)) +
+  geom_point(color = "blue", size = 4) +
+  geom_errorbar(aes(ymin = mean_mlv - sd_mlv, ymax = mean_mlv + sd_mlv), width = 0.5, size = 0.7, color = "blue") +
+  labs(x = "Cases of identical Air genres per area", y = "Mean +/- SD of\n mean log1p visitors")
+
+layout <- matrix(c(1,2,3,3),2,2,byrow=TRUE)
+multiplot(p1, p2, p3, layout=layout)
+
+
+# Reservations vs Visits
+
+foo <- air_reserve %>%
+  mutate(visit_date = date(visit_datetime)) %>%
+  group_by(air_store_id,visit_date) %>%
+  summarise(reserve_visitors_air = sum(reserve_visitors))
+
+bar <- hpg_reserve %>%
+  mutate(visit_date = date(visit_datetime)) %>%
+  group_by(hpg_store_id,visit_date) %>%
+  summarise(reserve_visitors_hpg = sum(reserve_visitors)) %>%
+  inner_join(store_ids, by = "hpg_store_id")
+
+all_reserve <- air_visits %>%
+  inner_join(foo, by = c("air_store_id", "visit_date")) %>%
+  inner_join(bar, by = c("air_store_id", "visit_date")) %>%
+  mutate(reserve_visitors = reserve_visitors_air + reserve_visitors_hpg)
+
+#
+p <- all_reserve %>%
+  filter(reserve_visitors < 120) %>%
+  ggplot(aes(reserve_visitors, visitors)) +
+  geom_point(color = "black", alpha = 0.5) +
+  geom_abline(slope = 1, intercept = 0, color = "grey60") +
+  geom_smooth(method = "lm", color = "blue")
+ggMarginal(p, type="histogram", fill = "blue", bins=50)
+
+##
+p1 <- all_reserve %>%
+  ggplot(aes(visitors - reserve_visitors)) +
+  geom_histogram(binwidth = 5, fill = "black") +
+  coord_flip() +
+  labs(x = "")
+
+p2 <- all_reserve %>%
+  ggplot(aes(visitors - reserve_visitors_air)) +
+  geom_histogram(binwidth = 5, fill = "blue") +
+  coord_flip() +
+  labs(x = "")
+
+p3 <- all_reserve %>%
+  ggplot(aes(visitors - reserve_visitors_hpg)) +
+  geom_histogram(binwidth = 5, fill = "red") +
+  coord_flip() +
+  labs(x = "")
+
+p4 <- all_reserve %>%
+  ggplot(aes(visit_date, visitors - reserve_visitors)) +
+  geom_hline(yintercept = c(150, 0, -250)) +
+  geom_line() +
+  geom_line(aes(visit_date, visitors - reserve_visitors_air + 150), color = "blue") +
+  geom_line(aes(visit_date, visitors - reserve_visitors_hpg - 250), color = "red") +
+  ggtitle("Visitors - Reserved: all (black), air (blue), hpg (red)")
+
+layout <- matrix(c(4,4,2,4,4,1,4,4,3),3,3,byrow=TRUE)
+multiplot(p1, p2, p3, p4, layout=layout)
+
+#
+all_reserve %>%
+  mutate(date = visit_date) %>%
+  left_join(holidays, by = "date") %>%
+  ggplot(aes(visitors - reserve_visitors, fill = holiday_flg)) +
+  geom_density(alpha = 0.5)
