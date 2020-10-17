@@ -1417,7 +1417,7 @@ plot_tk_lm_air_id <- function(air_id){
     y_pred = pred
   )
   
-  # plot
+  # plot the grapgh
   p <- pred_tk %>%
     ggplot(aes(date, y_pred)) +
     geom_line(data = visits_train, aes(ds, y), colour = "black") +
