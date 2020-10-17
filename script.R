@@ -791,3 +791,30 @@ all_reserve %>%
   ggplot(aes(wday, visitors - reserve_visitors, fill = wday)) +
   geom_boxplot() +
   theme(legend.position = "none")
+
+# Restaurant per area - air/hpg_count
+p1 <- air_count %>%
+  ggplot(aes(air_count)) +
+  geom_histogram(binwidth = 2, fill = "blue")
+
+p2 <- hpg_count %>%
+  ggplot(aes(hpg_count)) +
+  geom_histogram(binwidth = 5, fill = "red")
+
+p3 <- air_visits %>%
+  left_join(air_store, by = "air_store_id") %>%
+  group_by(air_store_id, air_count) %>%
+  summarise(mean_store_visit = mean(log1p(visitors))) %>%
+  group_by(air_count) %>%
+  summarise(mean_log_visitors = mean(mean_store_visit),
+            sd_log_visitors = sd(mean_store_visit)) %>%
+  ggplot(aes(air_count, mean_log_visitors)) +
+  geom_point(size = 4, color = "blue") +
+  geom_errorbar(aes(ymin = mean_log_visitors - sd_log_visitors,
+                    ymax = mean_log_visitors + sd_log_visitors),
+                color = "blue", width = 0.5, size = 0.7) +
+  geom_smooth(method = "lm", color = "black") +
+  labs(x = "Air restaurants per area")
+
+layout <- matrix(c(1,2,3,3),2,2,byrow=TRUE)
+multiplot(p1, p2, p3, layout=layout)
