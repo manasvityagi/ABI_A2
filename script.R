@@ -1430,6 +1430,3 @@ plot_tk_lm_air_id <- function(air_id){
 
 #Finally we apply it to our default example time series:
 plot_tk_lm_air_id("air_ba937bf13d40fb24")
-
-
-weather_stations <- as.tibble(fread(str_c("weather_stations.csv")))
