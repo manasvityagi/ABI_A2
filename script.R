@@ -289,3 +289,62 @@ leaflet(air_store) %>%
   addMarkers(~longitude, ~latitude,
              popup = ~air_store_id, label = ~air_genre_name,
              clusterOptions = markerClusterOptions())
+
+# plot the numbers of different types of cuisine (or air_genre_names)
+
+p1 <- air_store %>%
+  group_by(air_genre_name) %>%
+  count() %>%
+  ggplot(aes(reorder(air_genre_name, n, FUN = min), n, fill = air_genre_name)) +
+  geom_col() +
+  coord_flip() +
+  theme(legend.position = "none") +
+  labs(x = "Type of cuisine (air_genre_name)", y = "Number of air restaurants")
+
+p2 <- air_store %>%
+  group_by(air_area_name) %>%
+  count() %>%
+  ungroup() %>%
+  top_n(15,n) %>%
+  ggplot(aes(reorder(air_area_name, n, FUN = min) ,n, fill = air_area_name)) +
+  geom_col() +
+  theme(legend.position = "none") +
+  coord_flip() +
+  labs(x = "Top 15 areas (air_area_name)", y = "Number of air restaurants")
+
+layout <- matrix(c(1,2),2,1,byrow=TRUE)
+multiplot(p1, p2, layout=layout)
+
+# Visualize HPG Store
+leaflet(hpg_store) %>%
+  addTiles() %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addMarkers(~longitude, ~latitude,
+             popup = ~hpg_store_id, label = ~hpg_genre_name,
+             clusterOptions = markerClusterOptions())
+
+#  breakdown of genre and area for the hpg restaurants
+
+p1 <- hpg_store %>%
+  group_by(hpg_genre_name) %>%
+  count() %>%
+  ggplot(aes(reorder(hpg_genre_name, n, FUN = min), n, fill = hpg_genre_name)) +
+  geom_col() +
+  coord_flip() +
+  theme(legend.position = "none") +
+  labs(x = "Type of cuisine (hpg_genre_name)", y = "Number of hpg restaurants")
+
+p2 <- hpg_store %>%
+  mutate(area = str_sub(hpg_area_name, 1, 20)) %>%
+  group_by(area) %>%
+  count() %>%
+  ungroup() %>%
+  top_n(15,n) %>%
+  ggplot(aes(reorder(area, n, FUN = min) ,n, fill = area)) +
+  geom_col() +
+  theme(legend.position = "none") +
+  coord_flip() +
+  labs(x = "Top 15 areas (hpg_area_name)", y = "Number of hpg restaurants")
+
+layout <- matrix(c(1,2),1,2,byrow=TRUE)
+multiplot(p1, p2, layout=layout)
