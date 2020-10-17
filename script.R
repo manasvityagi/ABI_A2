@@ -1,5 +1,4 @@
 
-
 # general visualisation
 library('ggplot2') # visualisation
 library('scales') # visualisation
@@ -908,8 +907,6 @@ layout <- matrix(c(1,2,1,2,1,2,3,3,3,3),5,2,byrow=TRUE)
 multiplot(p1, p2, p3, layout=layout)
 
 
-# commnet for manash
-<<<<<<< HEAD
 # Time series parameters
 # After engineering new features based on the geographical or culinary 
 # properties of the different restaurants, we will now look directly at the time series of their visitor numbers
