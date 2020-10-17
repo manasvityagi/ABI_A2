@@ -1001,4 +1001,17 @@ max_date <- max(air_visits$visit_date)
 split_date <- max_date - pred_len
 all_visits <- tibble(visit_date = seq(min(air_visits$visit_date), max(air_visits$visit_date), 1))
 
+#
 
+foo <- air_visits %>%
+  filter(air_store_id == air_id)
+
+visits <- foo %>%
+  right_join(all_visits, by = "visit_date") %>%
+  mutate(visitors = log1p(visitors)) %>%
+  replace_na(list(visitors = median(log1p(foo$visitors)))) %>%
+  rownames_to_column()
+# Using this new time series, we now split the data into training and validation sets.
+
+visits_train <- visits %>% filter(visit_date <= split_date)
+visits_valid <- visits %>% filter(visit_date > split_date)
