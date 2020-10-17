@@ -1263,5 +1263,50 @@ multiplot(p1, p2, layout=layout)
 ######### 8.3 Holt-Winters ###########
 
 #A more traditional time series filtering and forecasting is the Holt-Winters algorithm
+#This is an exponential smoothing method which uses moving averages to take into account the presence of a trend in the data. Here #we define a default seasonal model in a fitting and plotting function
+plot_hw_air_id <- function(air_id){
+  
+  pred_len <- test %>%
+    separate(id, c("air", "store_id", "date"), sep = "_") %>%
+    distinct(date) %>%
+    nrow()
+  
+  max_date <- max(air_visits$visit_date)
+  split_date <- max_date - pred_len
+  all_visits <- tibble(visit_date = seq(min(air_visits$visit_date), max(air_visits$visit_date), 1))
+  
+  foo <- air_visits %>%
+    filter(air_store_id == air_id)
+  
+  visits <- foo %>%
+    right_join(all_visits, by = "visit_date") %>%
+    mutate(visitors = log1p(visitors)) %>%
+    replace_na(list(visitors = median(log1p(foo$visitors)))) %>%
+    rownames_to_column()
+  
+  visits_train <- visits %>% filter(visit_date <= split_date)
+  visits_valid <- visits %>% filter(visit_date > split_date)
+  
+  hw.fit <- HoltWinters(tsclean(ts(visits_train$visitors, frequency = 7)))
+  
+  hw_visits <- predict(hw.fit, n.ahead = pred_len, prediction.interval = T, level = 0.95) %>%
+    as.tibble() %>%
+    bind_cols(visits_valid)
+  
+  visits_train %>%
+    ggplot(aes(visit_date, visitors)) +
+    geom_line() +
+    geom_ribbon(data = hw_visits, aes(x = visit_date, ymin = lwr, ymax = upr), fill = "light blue") +
+    geom_line(data = hw_visits, aes(visit_date, visitors), color = "grey60") +
+    geom_line(data = hw_visits, aes(visit_date, fit), color = "blue") +
+    geom_line(data = hw_visits, aes(visit_date, fit), color = "blue") +
+    labs(x = "Time [weeks]", y = "log1p visitors vs predictions") +
+    ggtitle("HoltWinters")
+}
 
+#apply this function to our example time series
+
+plot_hw_air_id("air_ba937bf13d40fb24")
+
+# also plot the same predictions as for prophet above:
 
