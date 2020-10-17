@@ -1397,7 +1397,7 @@ plot_tk_lm_air_id <- function(air_id){
   visits_train <- visits %>% filter(ds <= split_date)
   visits_valid <- visits %>% filter(ds > split_date)
   
-  # augment train with ts info
+  # augment train with time series info
   visits_train_aug <- visits_train %>%
     tk_augment_timeseries_signature()
   
