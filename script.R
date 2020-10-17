@@ -1,3 +1,5 @@
+
+
 # general visualisation
 library('ggplot2') # visualisation
 library('scales') # visualisation
@@ -32,7 +34,6 @@ library('lubridate') # date and time
 library('timeDate') # date and time
 library('tseries') # time series analysis
 library('forecast') # time series analysis
-library('prophet') # time series analysis
 library('timetk') # time series analysis
 
 # Maps / geospatial
@@ -40,6 +41,8 @@ library('geosphere') # geospatial locations
 library('leaflet') # maps
 library('leaflet.extras') # maps
 library('maps') # maps
+
+library('prophet')
 
 
 ##################HELPER FUNCTIONS###########################
@@ -1015,3 +1018,120 @@ visits <- foo %>%
 
 visits_train <- visits %>% filter(visit_date <= split_date)
 visits_valid <- visits %>% filter(visit_date > split_date)
+
+##
+## ARIMA fitting done here
+arima.fit <- auto.arima(tsclean(ts(visits_train$visitors, frequency = 7)),
+                        stepwise = FALSE, approximation = FALSE)
+
+
+# Using the fitted ARIMA model we will forecast for our "prediction length". We include confidence intervals.
+
+arima_visits <- arima.fit %>% forecast(h = pred_len, level = c(50,95))
+
+arima_visits %>%
+  autoplot +
+  geom_line(aes(as.integer(rowname)/7, visitors), data = visits_valid, color = "grey40") +
+  labs(x = "Time [weeks]", y = "log1p visitors vs auto.arima predictions")
+
+#We find that the first days of the forecast fit quite well, but then our prediction is not able to capture the larger spikes. #Still, it's a useful starting point to compare other methods to.
+#Now we turn this procedure into a function, including the plotting part.
+
+
+plot_auto_arima_air_id <- function(air_id){
+  
+  pred_len <- test %>%
+    separate(id, c("air", "store_id", "date"), sep = "_") %>%
+    distinct(date) %>%
+    nrow()
+  
+  max_date <- max(air_visits$visit_date)
+  split_date <- max_date - pred_len
+  all_visits <- tibble(visit_date = seq(min(air_visits$visit_date), max(air_visits$visit_date), 1))
+  
+  foo <- air_visits %>%
+    filter(air_store_id == air_id)
+  
+  visits <- foo %>%
+    right_join(all_visits, by = "visit_date") %>%
+    mutate(visitors = log1p(visitors)) %>%
+    replace_na(list(visitors = median(log1p(foo$visitors)))) %>%
+    rownames_to_column()
+  
+  visits_train <- visits %>% filter(visit_date <= split_date)
+  visits_valid <- visits %>% filter(visit_date > split_date)
+  
+  arima.fit <- auto.arima(tsclean(ts(visits_train$visitors, frequency = 7)),
+                          stepwise = FALSE, approximation = FALSE)
+  
+  arima_visits <- arima.fit %>% forecast(h = pred_len, level = c(50,95))
+  
+  arima_visits %>%
+    autoplot +
+    geom_line(aes(as.integer(rowname)/7, visitors), data = visits_valid, color = "grey40") +
+    labs(x = "Time [weeks]", y = "log1p visitors vs forecast")
+}
+
+##########
+#And we apply this function to a few time series', including two of the slope outliers from the previous section:
+p1 <- plot_auto_arima_air_id("air_f3f9824b7d70c3cf")
+p2 <- plot_auto_arima_air_id("air_8e4360a64dbd4c50")
+p3 <- plot_auto_arima_air_id("air_1c0b150f9e696a5f")
+p4 <- plot_auto_arima_air_id("air_900d755ebd2f7bbd")
+
+layout <- matrix(c(1,2,3,4),2,2,byrow=TRUE)
+multiplot(p1, p2, p3, p4, layout=layout)
+
+#8.2 Prophet
+#The prophet forecasting tool is an open-source software developed by Facebook. It is available for both R and Python.
+
+#Prophet utilises an additive regression model which decomposes a time series into (i) a (piecewise) linear/logistic trend, (ii) a #yearly seasonal component, (iii) a weekly seasonal component, and (iv) an optional list of important days (such as holidays, #special events, .). It claims to be "robust to missing data, shifts in the trend, and large outliers". 
+
+air_id = "air_ba937bf13d40fb24"
+
+pred_len <- test %>%
+  separate(id, c("air", "store_id", "date"), sep = "_") %>%
+  distinct(date) %>%
+  nrow()
+
+max_date <- max(air_visits$visit_date)
+split_date <- max_date - pred_len
+all_visits <- tibble(visit_date = seq(min(air_visits$visit_date), max(air_visits$visit_date), 1))
+
+foo <- air_visits %>%
+  filter(air_store_id == air_id)
+
+visits <- foo %>%
+  right_join(all_visits, by = "visit_date") %>%
+  mutate(visitors = log1p(visitors)) %>%
+  rownames_to_column() %>%
+  select(y = visitors,
+         ds = visit_date)
+
+visits_train <- visits %>% filter(ds <= split_date)
+visits_valid <- visits %>% filter(ds > split_date)
+
+#
+proph <- prophet(visits_train, changepoint.prior.scale=0.5, yearly.seasonality=FALSE, daily.seasonality = FALSE)
+future <- make_future_dataframe(proph, periods = pred_len)
+fcast <- predict(proph, future)
+
+# plot the forecasting done by prophet
+plot(proph, fcast)
+
+##
+prophet_plot_components(proph, fcast)
+
+#
+#using result for ggplot2
+
+fcast %>%
+  as_tibble() %>%
+  mutate(ds = date(ds)) %>%
+  ggplot(aes(ds, yhat)) + 
+  geom_ribbon(aes(x = ds, ymin = yhat_lower, ymax = yhat_upper), fill = "light blue") +
+  geom_line(colour = "blue") +
+  geom_line(data = visits_train, aes(ds, y), colour = "black") +
+  geom_line(data = visits_valid, aes(ds, y), colour = "grey50")
+
+
