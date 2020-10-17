@@ -646,3 +646,148 @@ all_reserve %>%
   left_join(holidays, by = "date") %>%
   ggplot(aes(visitors - reserve_visitors, fill = holiday_flg)) +
   geom_density(alpha = 0.5)
+
+#  Feature engineering
+#derive NEW features from the existing ones and the purpose of these new features is
+#to provide additional predictive power for our goal to forecast visitor numbers
+
+air_visits <- air_visits %>%
+  mutate(wday = wday(visit_date, label=TRUE, week_start = 1),
+         wday = fct_relevel(wday, c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")),
+         month = month(visit_date, label=TRUE))
+
+air_reserve <- air_reserve %>%
+  mutate(reserve_date = date(reserve_datetime),
+         reserve_hour = hour(reserve_datetime),
+         reserve_wday = wday(reserve_datetime, label = TRUE, week_start = 1),
+         reserve_wday = fct_relevel(reserve_wday, c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")),
+         visit_date = date(visit_datetime),
+         visit_hour = hour(visit_datetime),
+         visit_wday = wday(visit_datetime, label = TRUE, week_start = 1),
+         visit_wday = fct_relevel(visit_wday, c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")),
+         diff_hour = time_length(visit_datetime - reserve_datetime, unit = "hour"),
+         diff_day = time_length(visit_datetime - reserve_datetime, unit = "day"))
+
+hpg_reserve <- hpg_reserve %>%
+  mutate(reserve_date = date(reserve_datetime),
+         reserve_hour = hour(reserve_datetime),
+         reserve_wday = wday(reserve_datetime, label = TRUE, week_start = 1),
+         reserve_wday = fct_relevel(reserve_wday, c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")),
+         visit_date = date(visit_datetime),
+         visit_hour = hour(visit_datetime),
+         visit_wday = wday(visit_datetime, label = TRUE, week_start = 1),
+         visit_wday = fct_relevel(visit_wday, c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")),
+         diff_hour = time_length(visit_datetime - reserve_datetime, unit = "hour"),
+         diff_day = time_length(visit_datetime - reserve_datetime, unit = "day"))
+
+# count stores in area
+air_count <- air_store %>%
+  group_by(air_area_name) %>%
+  summarise(air_count = n())
+
+hpg_count <- hpg_store %>%
+  group_by(hpg_area_name) %>%
+  summarise(hpg_count = n())
+
+# distances
+med_coord_air <- air_store %>%
+  summarise_at(vars(longitude:latitude), median)
+med_coord_hpg <- hpg_store %>%
+  summarise_at(vars(longitude:latitude), median)
+
+air_coords <- air_store %>%
+  select(longitude, latitude)
+hpg_coords <- hpg_store %>%
+  select(longitude, latitude)
+
+air_store$dist <- distCosine(air_coords, med_coord_air)/1e3
+hpg_store$dist <- distCosine(hpg_coords, med_coord_hpg)/1e3
+
+# apply counts, dist; add prefecture
+air_store <- air_store %>%
+  mutate(dist_group = as.integer(case_when(
+    dist < 80 ~ 1,
+    dist < 300 ~ 2,
+    dist < 500 ~ 3,
+    dist < 750 ~ 4,
+    TRUE ~ 5))) %>%
+  left_join(air_count, by = "air_area_name") %>%
+  separate(air_area_name, c("prefecture"), sep = " ", remove = FALSE)
+
+hpg_store <- hpg_store %>%
+  mutate(dist_group = as.integer(case_when(
+    dist < 80 ~ 1,
+    dist < 300 ~ 2,
+    dist < 500 ~ 3,
+    dist < 750 ~ 4,
+    TRUE ~ 5))) %>%
+  left_join(hpg_count, by = "hpg_area_name") %>%
+  separate(hpg_area_name, c("prefecture"), sep = " ", remove = FALSE)
+
+# Feature 1: Days of the week & months of the year
+
+p1 <- air_visits %>%
+  group_by(wday) %>%
+  summarise(mean_log_visitors = mean(log1p(visitors)),
+            sd_log_visitors = sd(log1p(visitors))) %>%
+  ggplot(aes(wday, mean_log_visitors, color = wday)) +
+  geom_point(size = 4) +
+  geom_errorbar(aes(ymin = mean_log_visitors - sd_log_visitors,
+                    ymax = mean_log_visitors + sd_log_visitors,
+                    color = wday), width = 0.5, size = 0.7) +
+  theme(legend.position = "none")
+
+p2 <- air_visits %>%
+  mutate(visitors = log1p(visitors)) %>%
+  ggplot(aes(visitors, wday, fill = wday)) +
+  geom_density_ridges(bandwidth = 0.1) +
+  scale_x_log10() +
+  theme(legend.position = "none") +
+  labs(x = "log1p(visitors)", y = "")
+
+p3 <- air_visits %>%
+  group_by(month) %>%
+  summarise(mean_log_visitors = mean(log1p(visitors)),
+            sd_log_visitors = sd(log1p(visitors))) %>%
+  ggplot(aes(month, mean_log_visitors, color = month)) +
+  geom_point(size = 4) +
+  geom_errorbar(aes(ymin = mean_log_visitors - sd_log_visitors,
+                    ymax = mean_log_visitors + sd_log_visitors,
+                    color = month), width = 0.5, size = 0.7) +
+  theme(legend.position = "none")
+
+p4 <- air_visits %>%
+  mutate(visitors = log1p(visitors)) %>%
+  ggplot(aes(visitors, month, fill = month)) +
+  geom_density_ridges(bandwidth = 0.1) +
+  scale_x_log10() +
+  theme(legend.position = "none") +
+  labs(x = "log1p(visitors)", y = "")
+
+layout <- matrix(c(1,2,3,4),2,2,byrow=TRUE)
+multiplot(p1, p2, p3, p4, layout=layout)
+
+# By Air genre
+
+air_visits %>%
+  left_join(air_store, by = "air_store_id") %>%
+  group_by(wday, air_genre_name) %>%
+  summarise(mean_log_visitors = mean(log1p(visitors)),
+            sd_log_visitors = sd(log1p(visitors))) %>%
+  ggplot(aes(wday, mean_log_visitors, color = wday)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = mean_log_visitors - sd_log_visitors,
+                    ymax = mean_log_visitors + sd_log_visitors,
+                    color = wday), width = 0.5, size = 0.7) +
+  theme(legend.position = "none", axis.text.x  = element_text(angle=45, hjust=1, vjust=0.9)) +
+  facet_wrap(~ air_genre_name)
+
+
+# visitors vs reservations
+
+all_reserve %>%
+  mutate(wday = wday(visit_date, label=TRUE, week_start = 1),
+         wday = fct_relevel(wday, c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"))) %>%
+  ggplot(aes(wday, visitors - reserve_visitors, fill = wday)) +
+  geom_boxplot() +
+  theme(legend.position = "none")
