@@ -1310,3 +1310,126 @@ plot_hw_air_id("air_ba937bf13d40fb24")
 
 # also plot the same predictions as for prophet above:
 
+
+###############8.4 timetk ###################
+# timetk package is a recently released tool kit for time series analysis.
+# It is designed to work with the tidy "tibble" data frames.
+
+#Here we briefly describe the timetk approach and how we can apply it to our data.
+#First, we will create the train and validation data frames in the same way as for the other prediction tools:
+
+air_id = "air_ba937bf13d40fb24"
+
+pred_len <- test %>%
+  separate(id, c("air", "store_id", "date"), sep = "_") %>%
+  distinct(date) %>%
+  nrow()
+
+max_date <- max(air_visits$visit_date)
+split_date <- max_date - pred_len
+all_visits <- tibble(visit_date = seq(min(air_visits$visit_date), max(air_visits$visit_date), 1))
+
+foo <- air_visits %>%
+  filter(air_store_id == air_id)
+
+visits <- foo %>%
+  right_join(all_visits, by = "visit_date") %>%
+  mutate(visitors = log1p(visitors)) %>%
+  rownames_to_column() %>%
+  select(y = visitors,
+         ds = visit_date)
+
+visits_train <- visits %>% filter(ds <= split_date)
+visits_valid <- visits %>% filter(ds > split_date)
+
+#Then, we use the tk_augment_timeseries_signature tool to augment our data frames with time series characteristics
+
+visits_train_aug <- visits_train %>%
+  tk_augment_timeseries_signature()
+
+visits_valid_aug <- visits_valid %>%
+  .$ds %>%
+  tk_get_timeseries_signature()
+
+glimpse(visits_train_aug)
+
+
+#Now, the idea behind timetk is to use these new features to make predictions based on a regression or classification approach; #with standard tools such as linear/logistic regression or (boosted/ensembled) trees. For this example, we will use a simple
+# linear model.
+
+
+
+fit_lm <- lm(y ~ ., data = select(visits_train_aug, -c(ds, diff, wday.xts, wday.lbl, year.iso)))
+
+
+#Then we use the standard predict tool to apply the model to our prediction range.
+
+pred <- predict(fit_lm, newdata = select(visits_valid_aug, -c(index, diff, wday.xts, wday.lbl, year.iso)))
+
+pred_tk <- tibble(
+  date  = visits_valid$ds,
+  value = pred
+)
+
+## as a function
+
+plot_tk_lm_air_id <- function(air_id){
+  
+  pred_len <- test %>%
+    separate(id, c("air", "store_id", "date"), sep = "_") %>%
+    distinct(date) %>%
+    nrow()
+  
+  max_date <- max(air_visits$visit_date)
+  split_date <- max_date - pred_len
+  all_visits <- tibble(visit_date = seq(min(air_visits$visit_date), max(air_visits$visit_date), 1))
+  
+  foo <- air_visits %>%
+    filter(air_store_id == air_id)
+  
+  visits <- foo %>%
+    right_join(all_visits, by = "visit_date") %>%
+    mutate(visitors = log1p(visitors)) %>%
+    rownames_to_column() %>%
+    select(y = visitors,
+           ds = visit_date)
+  
+  visits_train <- visits %>% filter(ds <= split_date)
+  visits_valid <- visits %>% filter(ds > split_date)
+  
+  # augment train with ts info
+  visits_train_aug <- visits_train %>%
+    tk_augment_timeseries_signature()
+  
+  # fit lm
+  fit_lm <- lm(y ~ ., data = select(visits_train_aug, -c(ds, diff, wday.xts, wday.lbl, year.iso)))
+  
+  # augment valid with ts info
+  visits_valid_aug <- visits_valid %>%
+    .$ds %>%
+    tk_get_timeseries_signature()
+  
+  # predict from lm
+  pred <- predict(fit_lm, newdata = select(visits_valid_aug, -c(index, diff, wday.xts, wday.lbl, year.iso)))
+  
+  pred_tk <- tibble(
+    date  = visits_valid$ds,
+    y_pred = pred
+  )
+  
+  # plot
+  p <- pred_tk %>%
+    ggplot(aes(date, y_pred)) +
+    geom_line(data = visits_train, aes(ds, y), colour = "black") +
+    geom_line(data = visits_valid, aes(ds, y), colour = "grey50") +
+    geom_line(colour = "blue") +
+    labs(title = str_c("timetk for ", air_id))
+  
+  return(p)
+} 
+
+#Finally we apply it to our default example time series:
+plot_tk_lm_air_id("air_ba937bf13d40fb24")
+
+
+weather_stations <- as.tibble(fread(str_c("weather_stations.csv")))
