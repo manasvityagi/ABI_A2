@@ -1135,3 +1135,136 @@ fcast %>%
   geom_line(data = visits_valid, aes(ds, y), colour = "grey50")
 
 
+# lets turn this into another function
+
+plot_prophet_air_id <- function(air_id){
+  
+  pred_len <- test %>%
+    separate(id, c("air", "store_id", "date"), sep = "_") %>%
+    distinct(date) %>%
+    nrow()
+  
+  max_date <- max(air_visits$visit_date)
+  split_date <- max_date - pred_len
+  all_visits <- tibble(visit_date = seq(min(air_visits$visit_date), max(air_visits$visit_date), 1))
+  
+  foo <- air_visits %>%
+    filter(air_store_id == air_id)
+  
+  visits <- foo %>%
+    right_join(all_visits, by = "visit_date") %>%
+    mutate(visitors = log1p(visitors)) %>%
+    rownames_to_column() %>%
+    select(y = visitors,
+           ds = visit_date)
+  
+  visits_train <- visits %>% filter(ds <= split_date)
+  visits_valid <- visits %>% filter(ds > split_date)
+  
+  proph <- prophet(visits_train, changepoint.prior.scale=0.5,
+                   yearly.seasonality=FALSE, daily.seasonality = FALSE)
+  future <- make_future_dataframe(proph, periods = pred_len)
+  fcast <- predict(proph, future)
+  
+  p <- fcast %>%
+    as.tibble() %>%
+    mutate(ds = date(ds)) %>%
+    ggplot(aes(ds, yhat)) +
+    geom_ribbon(aes(x = ds, ymin = yhat_lower, ymax = yhat_upper), fill = "light blue") +
+    geom_line(colour = "blue") +
+    geom_line(data = visits_train, aes(ds, y), colour = "black") +
+    geom_line(data = visits_valid, aes(ds, y), colour = "grey50") +
+    labs(title = str_c("Prophet for ", air_id))
+  
+  return(p)
+}  
+
+#then we forecast and plot the same time series as above
+p1 <- plot_prophet_air_id("air_f3f9824b7d70c3cf")
+p2 <- plot_prophet_air_id("air_8e4360a64dbd4c50")
+p3 <- plot_prophet_air_id("air_1c0b150f9e696a5f")
+
+p4 <- plot_prophet_air_id("air_820d1919cbecaa0a")
+
+layout <- matrix(c(1,2,3,4),2,2,byrow=TRUE)
+multiplot(p1, p2, p3, p4, layout=layout)
+
+# we need to do is to truncate our air_visits data on May 31 2016 in an intermediate step
+
+plot_prophet_air_id_holiday <- function(air_id, use_hday){
+  
+  air_visits_cut <- air_visits %>%
+    filter(visit_date <= ymd("20160531"))
+  
+  hday <- holidays %>%
+    filter(holiday_flg == TRUE) %>%
+    mutate(holiday = "holiday") %>%
+    select(ds = date, holiday)
+  
+  pred_len <- test %>%
+    separate(id, c("air", "store_id", "date"), sep = "_") %>%
+    distinct(date) %>%
+    nrow()
+  
+  max_date <- max(air_visits_cut$visit_date)
+  split_date <- max_date - pred_len
+  all_visits <- tibble(visit_date = seq(min(air_visits_cut$visit_date), max(air_visits_cut$visit_date), 1))
+  
+  foo <- air_visits_cut %>%
+    filter(air_store_id == air_id)
+  
+  visits <- foo %>%
+    right_join(all_visits, by = "visit_date") %>%
+    mutate(visitors = log1p(visitors)) %>%
+    rownames_to_column() %>%
+    select(y = visitors,
+           ds = visit_date)
+  
+  visits_train <- visits %>% filter(ds <= split_date)
+  visits_valid <- visits %>% filter(ds > split_date)
+  
+  if (use_hday == TRUE){
+    proph <- prophet(visits_train,
+                     changepoint.prior.scale=0.5,
+                     yearly.seasonality=FALSE,
+                     daily.seasonality=FALSE,
+                     holidays = hday)
+    ptitle = "Prophet (w/ holidays) for "
+  } else {
+    proph <- prophet(visits_train,
+                     changepoint.prior.scale=0.5,
+                     yearly.seasonality=FALSE,
+                     daily.seasonality = FALSE)
+    ptitle = "Prophet for "
+  }
+  
+  future <- make_future_dataframe(proph, periods = pred_len)
+  fcast <- predict(proph, future)
+  
+  p <- fcast %>%
+    as.tibble() %>%
+    mutate(ds = date(ds)) %>%
+    ggplot(aes(ds, yhat)) +
+    geom_ribbon(aes(x = ds, ymin = yhat_lower, ymax = yhat_upper), fill = "light blue") +
+    geom_line(colour = "blue") +
+    geom_line(data = visits_train, aes(ds, y), colour = "black") +
+    geom_line(data = visits_valid, aes(ds, y), colour = "grey50") +
+    labs(title = str_c(ptitle, air_id))
+  
+  return(p)
+}  
+
+# And then we take a well behaved time series and compare the predictions with and without holidays:
+
+p1 <- plot_prophet_air_id_holiday("air_5c817ef28f236bdf", TRUE)
+p2 <- plot_prophet_air_id_holiday("air_5c817ef28f236bdf", FALSE)
+
+layout <- matrix(c(1,2),2,1,byrow=TRUE)
+multiplot(p1, p2, layout=layout)
+
+
+######### 8.3 Holt-Winters ###########
+
+#A more traditional time series filtering and forecasting is the Holt-Winters algorithm
+
+
